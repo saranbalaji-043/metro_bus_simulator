@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Metro Bus Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  :root {
+    --bg: #0f1015;
+    --road: #2a2a35;
+    --accent: #ffaa00;
+    --accent2: #00ccff;
+    --danger: #ff4444;
+    --success: #00ff88;
+    --text: #e0e0e0;
+    --muted: #555570;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    font-family: 'Share Tech Mono', monospace;
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  #gameWrapper {
+    position: relative;
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+  }
+
+  canvas {
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    box-shadow: 0 0 30px rgba(255, 170, 0, 0.2), 0 0 80px rgba(255, 170, 0, 0.05);
+    display: block;
+  }
+
+  #sidebar {
+    width: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .panel {
+    background: rgba(20, 20, 30, 0.9);
+    border: 1px solid var(--muted);
+    border-radius: 10px;
+    padding: 14px;
+    backdrop-filter: blur(8px);
+  }
+
+  .panel h3 {
+    font-family: 'Russo One', sans-serif;
+    font-size: 12px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(255,170,0,0.2);
+    padding-bottom: 4px;
+  }
+
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 13px;
+  }
+
+  .stat-row .label { color: var(--muted); }
+  .stat-row .value { font-weight: 700; font-size: 15px; }
+  .stat-row .value.accent { color: var(--accent); }
+  .stat-row .value.accent2 { color: var(--accent2); }
+  .stat-row .value.danger { color: var(--danger); }
+  .stat-row .value.success { color: var(--success); }
+
+  .timer-bar-bg {
+    width: 100%;
+    height: 10px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 5px;
+    margin-top: 6px;
+    overflow: hidden;
+  }
+
+  .timer-bar-fill {
+    height: 100%;
+    background: var(--accent2);
+    border-radius: 5px;
+    transition: width 0.2s, background 0.3s;
+  }
+
+  .controls-list {
+    font-size: 12px;
+    line-height: 1.8;
+    color: var(--muted);
+  }
+
+  .controls-list kbd {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid var(--muted);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    color: var(--text);
+  }
+
+  #touchControls {
+    display: none;
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    gap: 12px;
+    z-index: 100;
+  }
+
+  .touch-btn {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: rgba(255, 170, 0, 0.15);
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .touch-btn:active { background: rgba(255, 170, 0, 0.4); }
+
+  @media (max-width: 800px) {
+    #gameWrapper { flex-direction: column; align-items: center; gap: 12px; }
+    #sidebar { width: 100%; max-width: 400px; flex-direction: row; flex-wrap: wrap; gap: 8px; }
+    .panel { flex: 1; min-width: 140px; padding: 10px; }
+    #touchControls { display: flex; }
+    canvas { max-width: 95vw; max-height: 60vh; }
+  }
+</style>
+</head>
+<body>
+
+<div id="gameWrapper">
+  <canvas id="gameCanvas" width="500" height="720"></canvas>
+
+  <div id="sidebar">
+    <div class="panel">
+      <h3><i class="fas fa-bus"></i> Dashboard</h3>
+      <div class="stat-row">
+        <span class="label">Passengers</span>
+        <span class="value accent2" id="uiPass">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="label">Score</span>
+        <span class="value accent" id="uiScore">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="label">High Score</span>
+        <span class="value" id="uiHigh">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="label">Speed</span>
+        <span class="value" id="uiSpeed">0 km/h</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3><i class="fas fa-clock"></i> Schedule</h3>
+      <div class="stat-row">
+        <span class="label">Time Left</span>
+        <span class="value danger" id="uiTime">45s</span>
+      </div>
+      <div class="timer-bar-bg">
+        <div class="timer-bar-fill" id="timerBarFill" style="width: 100%"></div>
+      </div>
+      <div class="stat-row" style="margin-top:8px;">
+        <span class="label">Next Stop</span>
+        <span class="value success" id="uiStop">--</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3><i class="fas fa-gamepad"></i> Controls</h3>
+      <div class="controls-list">
+        <kbd>&larr;</kbd> <kbd>&rarr;</kbd> Steer<br>
+        <kbd>&uarr;</kbd> Accelerate<br>
+        <kbd>&darr;</kbd> Brake<br>
+        <kbd>Space</kbd> Start / Restart
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="touchControls">
+  <button class="touch-btn" id="btnLeft"><i class="fas fa-chevron-left"></i></button>
+  <button class="touch-btn" id="btnUp"><i class="fas fa-chevron-up"></i></button>
+  <button class="touch-btn" id="btnDown"><i class="fas fa-chevron-down"></i></button>
+  <button class="touch-btn" id="btnRight"><i class="fas fa-chevron-right"></i></button>
+</div>
+
+<script>
+// ============================================================
+// METRO BUS SIMULATOR
+// ============================================================
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width;
+const H = canvas.height;
+
+// ---- Game State ----
+const STATE = { MENU: 0, PLAYING: 1, LOADING: 2, GAMEOVER: 3 };
+let state = STATE.MENU;
+let score = 0;
+let highScore = parseInt(localStorage.getItem('busSimHigh') || '0');
+let passengers = 0;
+let maxTime = 45;
+let timeLeft = maxTime;
+let lastTimeTick = 0;
+let distance = 0;
+let shakeTimer = 0;
+let shakeIntensity = 0;
+let frameCount = 0;
+let isLoading = false;
+let loadTimer = 0;
+let currentStopName = '';
+
+// ---- Road Config ----
+// 6 lanes: Left 3 (oncoming), Right 3 (player side)
+const ROAD_LEFT = 50;
+const ROAD_RIGHT = W - 50;
+const ROAD_WIDTH = ROAD_RIGHT - ROAD_LEFT;
+const LANE_W = ROAD_WIDTH / 6;
+const MEDIAN_X = ROAD_LEFT + LANE_W * 3;
+
+let roadLineOffset = 0;
+
+// ---- Bus Config ----
+const bus = {
+  x: W / 2 + LANE_W * 1.5, // center of right middle lane
+  y: H - 160,
+  w: 42,
+  h: 105,
+  speed: 0,
+  maxSpeed: 5.5,
+  accel: 0.06,
+  brakeForce: 0.15,
+  friction: 0.02,
+  steerSpeed: 2.8,
+  tilt: 0,
+};
+
+// ---- Traffic ----
+let traffic = [];
+const CAR_COLORS = ['#ff4466', '#4488ff', '#ffaa00', '#aa44ff', '#44dddd', '#ff8844', '#88ff44'];
+let trafficTimer = 0;
+
+// ---- Bus Stops ----
+let busStops = [];
+let stopTimer = 0;
+const STOP_NAMES = ['Main St', 'Oak Ave', 'City Hall', 'Central Park', 'Market Rd', '5th Ave', 'Elm St', 'Union Sq', 'Harbor Blvd', 'Tech District'];
+let nextStopDist = 400;
+let currentDist = 0;
+
+// ---- City Objects (Buildings) ----
+let buildings = [];
+let buildingTimer = 0;
+
+// ---- Particles ----
+let particles = [];
+
+// ---- Input ----
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (state === STATE.MENU || state === STATE.GAMEOVER) startGame();
+  }
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// Touch
+const touchState = { left: false, right: false, up: false, down: false };
+function bindTouch(id, dir) {
+  const btn = document.getElementById(id);
+  btn.addEventListener('touchstart', e => { e.preventDefault(); touchState[dir] = true; });
+  btn.addEventListener('touchend', e => { e.preventDefault(); touchState[dir] = false; });
+  btn.addEventListener('mousedown', () => touchState[dir] = true);
+  btn.addEventListener('mouseup', () => touchState[dir] = false);
+}
+bindTouch('btnLeft', 'left');
+bindTouch('btnRight', 'right');
+bindTouch('btnUp', 'up');
+bindTouch('btnDown', 'down');
+
+canvas.addEventListener('click', () => {
+  if (state === STATE.MENU || state === STATE.GAMEOVER) startGame();
+});
+
+// ---- UI ----
+function updateUI() {
+  document.getElementById('uiPass').textContent = passengers;
+  document.getElementById('uiScore').textContent = score;
+  document.getElementById('uiHigh').textContent = highScore;
+  document.getElementById('uiSpeed').textContent = Math.floor(bus.speed * 22) + ' km/h';
+  document.getElementById('uiTime').textContent = Math.ceil(timeLeft) + 's';
+  document.getElementById('uiStop').textContent = currentStopName || '--';
+
+  const pct = Math.max(0, (timeLeft / maxTime) * 100);
+  const bar = document.getElementById('timerBarFill');
+  bar.style.width = pct + '%';
+  bar.style.background = pct < 25 ? 'var(--danger)' : pct < 50 ? 'var(--accent)' : 'var(--accent2)';
+}
+
+// ---- Start ----
+function startGame() {
+  score = 0;
+  passengers = 0;
+  timeLeft = maxTime;
+  lastTimeTick = Date.now();
+  distance = 0;
+  currentDist = 0;
+  nextStopDist = 400;
+  bus.x = ROAD_LEFT + LANE_W * 4.5;
+  bus.y = H - 160;
+  bus.speed = 0;
+  bus.tilt = 0;
+  traffic = [];
+  busStops = [];
+  buildings = [];
+  particles = [];
+  trafficTimer = 0;
+  stopTimer = 0;
+  buildingTimer = 0;
+  shakeTimer = 0;
+  isLoading = false;
+  loadTimer = 0;
+  frameCount = 0;
+  currentStopName = STOP_NAMES[0];
+  state = STATE.PLAYING;
+  updateUI();
+}
+
+// ---- Spawners ----
+function spawnTraffic() {
+  const isOncoming = Math.random() < 0.4;
+  const laneOffset = isOncoming ? Math.floor(Math.random() * 3) : 3 + Math.floor(Math.random() * 3);
+  const laneX = ROAD_LEFT + laneOffset * LANE_W + LANE_W / 2;
+  const isTruck = Math.random() < 0.25;
+  
+  const w = isTruck ? 38 : 32;
+  const h = isTruck ? 75 : 55;
+  const baseSpd = isOncoming ? (2.5 + Math.random() * 2) : (1.5 + Math.random() * 2);
+  const color = CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)];
+
+  traffic.push({
+    x: laneX,
+    y: isOncoming ? -h : H + 50,
+    w, h,
+    speed: baseSpd,
+    color: color,
+    isTruck: isTruck,
+    isOncoming: isOncoming,
+  });
+}
+
+function spawnBusStop() {
+  const stopX = ROAD_RIGHT + 25; // Stop area is on the right shoulder
+  const name = STOP_NAMES[Math.floor(Math.random() * STOP_NAMES.length)];
+  busStops.push({
+    x: stopX,
+    y: -40,
+    w: 60,
+    h: 80,
+    name: name,
+    served: false,
+  });
+  currentStopName = name;
+}
+
+function spawnBuilding() {
+  const side = Math.random() < 0.5 ? 'left' : 'right';
+  const bx = side === 'left' ? 5 + Math.random() * 30 : W - 35 + Math.random() * 30;
+  const bw = 25 + Math.random() * 20;
+  const bh = 40 + Math.random() * 80;
+  const windows = Math.floor(bh / 15);
+  buildings.push({
+    x: bx, y: -bh, w: bw, h: bh,
+    color: `hsl(${220 + Math.random()*20}, 15%, ${8 + Math.random()*6}%)`,
+    windowRows: windows,
+    windowCols: Math.floor(bw / 12),
+    lit: Array.from({length: windows * Math.floor(bw/12)}, () => Math.random() < 0.4),
+  });
+}
+
+// ---- Particles ----
+function emitExhaust() {
+  if (frameCount % 4 !== 0 || bus.speed < 0.5) return;
+  for (let i = 0; i < 2; i++) {
+    particles.push({
+      x: bus.x - 10 + i * 20 + (Math.random()-0.5)*4,
+      y: bus.y + bus.h/2,
+      vx: (Math.random()-0.5)*0.3,
+      vy: 1 + Math.random()*1,
+      life: 20, maxLife: 20,
+      size: 3 + Math.random()*3,
+      color: 'exhaust',
+    });
+  }
+}
+
+function emitSparks(x, y) {
+  for (let i = 0; i < 20; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const spd = 1 + Math.random() * 3;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd,
+      life: 25, maxLife: 25,
+      size: 2 + Math.random()*3,
+      color: 'spark',
+    });
+  }
+}
+
+function emitPassengers(x, y) {
+  for (let i = 0; i < 12; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const spd = 1 + Math.random() * 2;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd,
+      life: 30, maxLife: 30,
+      size: 3 + Math.random()*2,
+      color: 'passenger',
+    });
+  }
+}
+
+// ---- Drawing ----
+function drawBus(x, y, w, h, tilt) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (tilt) ctx.rotate(tilt * 0.03);
+
+  const hw = w/2, hh = h/2;
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.beginPath();
+  ctx.ellipse(3, hh + 5, hw+4, 10, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Main Body
+  ctx.fillStyle = '#ffaa00';
+  ctx.beginPath();
+  ctx.roundRect(-hw, -hh, w, h, 6);
+  ctx.fill();
+
+  // Bottom stripe
+  ctx.fillStyle = '#cc8800';
+  ctx.fillRect(-hw, hh - 15, w, 15);
+
+  // Windshield
+  ctx.fillStyle = 'rgba(100,200,255,0.4)';
+  ctx.fillRect(-hw+4, -hh+6, w-8, 18);
+
+  // Windows row
+  ctx.fillStyle = 'rgba(100,200,255,0.3)';
+  const winY = -hh + 30;
+  const winH = 12;
+  const winGap = 16;
+  for(let wy = winY; wy < hh - 25; wy += winGap) {
+    ctx.fillRect(-hw+4, wy, 8, winH);
+    ctx.fillRect(hw-12, wy, 8, winH);
+  }
+
+  // Destination Sign
+  ctx.fillStyle = '#111';
+  ctx.fillRect(-hw+6, -hh+2, w-12, 8);
+  ctx.fillStyle = '#ffcc00';
+  ctx.font = '6px "Share Tech Mono"';
+  ctx.textAlign = 'center';
+  ctx.fillText('METRO', 0, -hh + 8);
+  ctx.textAlign = 'left';
+
+  // Headlights
+  ctx.fillStyle = '#ffffcc';
+  ctx.shadowColor = '#ffffcc';
+  ctx.shadowBlur = 12;
+  ctx.fillRect(-hw+3, -hh-2, 6, 4);
+  ctx.fillRect(hw-9, -hh-2, 6, 4);
+  ctx.shadowBlur = 0;
+
+  // Taillights
+  ctx.fillStyle = '#ff3333';
+  ctx.shadowColor = '#ff3333';
+  ctx.shadowBlur = 6;
+  ctx.fillRect(-hw+3, hh-4, 6, 4);
+  ctx.fillRect(hw-9, hh-4, 6, 4);
+  ctx.shadowBlur = 0;
+
+  ctx.restore();
+}
+
+function drawCar(x, y, w, h, color, isOncoming) {
+  ctx.save();
+  ctx.translate(x, y);
+  const hw = w/2, hh = h/2;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(2, hh+3, hw+2, 6, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(-hw, -hh, w, h, 4);
+  ctx.fill();
+
+  // Darker roof
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(-hw+4, -hh+8, w-8, h*0.4);
+
+  if (isOncoming) {
+    // Headlights facing player
+    ctx.fillStyle = '#ffffcc';
+    ctx.shadowColor = '#ffffcc';
+    ctx.shadowBlur = 8;
+    ctx.fillRect(-hw+2, hh-3, 5, 3);
+    ctx.fillRect(hw-7, hh-3, 5, 3);
+  } else {
+    // Taillights
+    ctx.fillStyle = '#ff3333';
+    ctx.shadowColor = '#ff3333';
+    ctx.shadowBlur = 6;
+    ctx.fillRect(-hw+2, hh-3, 5, 3);
+    ctx.fillRect(hw-7, hh-3, 5, 3);
+  }
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+function drawTruck(x, y, w, h, color, isOncoming) {
+  ctx.save();
+  ctx.translate(x, y);
+  const hw = w/2, hh = h/2;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(3, hh+4, hw+3, 8, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Cargo
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(-hw, -hh, w, h, 3);
+  ctx.fill();
+
+  // Cabin
+  const cabY = isOncoming ? hh - 20 : -hh;
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(-hw+2, cabY, w-4, 20);
+
+  if (isOncoming) {
+    ctx.fillStyle = '#ffffcc';
+    ctx.shadowColor = '#ffffcc';
+    ctx.shadowBlur = 10;
+    ctx.fillRect(-hw+2, hh-3, 6, 3);
+    ctx.fillRect(hw-8, hh-3, 6, 3);
+  } else {
+    ctx.fillStyle = '#ff3333';
+    ctx.shadowColor = '#ff3333';
+    ctx.shadowBlur = 6;
+    ctx.fillRect(-hw+2, hh-4, 8, 4);
+    ctx.fillRect(hw-10, hh-4, 8, 4);
+  }
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+
+// ---- Main Draw ----
+function draw() {
+  ctx.save();
+  if (shakeTimer > 0) {
+    ctx.translate((Math.random()-0.5)*shakeIntensity, (Math.random()-0.5)*shakeIntensity);
+  }
+
+  // Background
+  ctx.fillStyle = '#0a0a12';
+  ctx.fillRect(0, 0, W, H);
+
+  // Buildings
+  buildings.forEach(b => {
+    ctx.fillStyle = b.color;
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    // Windows
+    ctx.fillStyle = '#ffee88';
+    let idx = 0;
+    for(let r=0; r<b.windowRows; r++) {
+      for(let c=0; c<b.windowCols; c++) {
+        if (b.lit[idx]) {
+          ctx.fillRect(b.x + 4 + c*12, b.y + 4 + r*15, 6, 8);
+        }
+        idx++;
+      }
+    }
+  });
+
+  // Road
+  const roadGrad = ctx.createLinearGradient(ROAD_LEFT, 0, ROAD_RIGHT, 0);
+  roadGrad.addColorStop(0, '#1c1c28');
+  roadGrad.addColorStop(0.5, '#222232');
+  roadGrad.addColorStop(1, '#1c1c28');
+  ctx.fillStyle = roadGrad;
+  ctx.fillRect(ROAD_LEFT, 0, ROAD_WIDTH, H);
+
+  // Road Shoulders
+  ctx.fillStyle = '#ffaa00';
+  ctx.fillRect(ROAD_LEFT-3, 0, 3, H);
+  ctx.fillRect(ROAD_RIGHT, 0, 3, H);
+
+  // Median
+  ctx.fillStyle = '#444460';
+  ctx.fillRect(MEDIAN_X - 3, 0, 6, H);
+  // Median dashes
+  ctx.setLineDash([15, 10]);
+  ctx.lineDashOffset = -roadLineOffset;
+  ctx.strokeStyle = '#ffaa00';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(MEDIAN_X, 0);
+  ctx.lineTo(MEDIAN_X, H);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Lane dashes
+  ctx.setLineDash([20, 20]);
+  ctx.lineDashOffset = -roadLineOffset;
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1.5;
+  for (let i = 1; i < 6; i++) {
+    if (i === 3) continue; // skip median
+    const lx = ROAD_LEFT + i * LANE_W;
+    ctx.beginPath();
+    ctx.moveTo(lx, 0);
+    ctx.lineTo(lx, H);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // Bus Stops
+  busStops.forEach(s => {
+    if (s.served) {
+      ctx.fillStyle = 'rgba(0,255,100,0.1)';
+      ctx.strokeStyle = 'rgba(0,255,100,0.3)';
+    } else {
+      ctx.fillStyle = 'rgba(0,200,255,0.15)';
+      ctx.strokeStyle = 'rgba(0,200,255,0.6)';
+    }
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(s.x - s.w/2, s.y - s.h/2, s.w, s.h, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    // Sign
+    ctx.fillStyle = '#333';
+    ctx.fillRect(s.x - 2, s.y - s.h/2 - 15, 4, 15);
+    ctx.fillStyle = s.served ? '#00ff88' : '#00ccff';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y - s.h/2 - 18, 6, 0, Math.PI*2);
+    ctx.fill();
+
+    // Text
+    ctx.fillStyle = '#fff';
+    ctx.font = '9px "Share Tech Mono"';
+    ctx.textAlign = 'center';
+    ctx.fillText(s.served ? 'SERVED' : 'STOP', s.x, s.y + 3);
+    ctx.textAlign = 'left';
+  });
+
+  // Traffic
+  traffic.forEach(t => {
+    if (t.isTruck) drawTruck(t.x, t.y, t.w, t.h, t.color, t.isOncoming);
+    else drawCar(t.x, t.y, t.w, t.h, t.color, t.isOncoming);
+  });
+
+  // Bus
+  drawBus(bus.x, bus.y, bus.w, bus.h, bus.tilt);
+
+  // Headlight beams
+  if (bus.speed > 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.04;
+    ctx.fillStyle = '#ffffcc';
+    ctx.beginPath();
+    ctx.moveTo(bus.x - 16, bus.y - bus.h/2);
+    ctx.lineTo(bus.x - 60, bus.y - bus.h/2 - 150);
+    ctx.lineTo(bus.x + 60, bus.y - bus.h/2 - 150);
+    ctx.lineTo(bus.x + 16, bus.y - bus.h/2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // Particles
+  particles.forEach(p => {
+    const alpha = p.life / p.maxLife;
+    if (p.color === 'exhaust') ctx.fillStyle = `rgba(150,150,170,${alpha*0.4})`;
+    else if (p.color === 'spark') ctx.fillStyle = `rgba(255,${150+Math.random()*100},30,${alpha})`;
+    else if (p.color === 'passenger') ctx.fillStyle = `rgba(0,200,255,${alpha})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, Math.max(0.5, p.size*alpha), 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // Vignette
+  const vigGrad = ctx.createRadialGradient(W/2, H/2, H*0.3, W/2, H/2, H*0.8);
+  vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
+  vigGrad.addColorStop(1, 'rgba(0,0,0,0.6)');
+  ctx.fillStyle = vigGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.restore();
+
+  // Overlays
+  if (state === STATE.MENU) {
+    drawOverlay('METRO BUS', 'Pick up passengers. Beat the clock.', 'Press SPACE or Tap to Start', '#ffaa00');
+  } else if (state === STATE.LOADING) {
+    drawLoadingOverlay();
+  } else if (state === STATE.GAMEOVER) {
+    drawOverlay('END OF ROUTE', `Score: ${score} | Passengers: ${passengers}`, 'Press SPACE or Tap to Retry', '#ff4444');
+  }
+}
+
+function drawOverlay(title, sub, action, color) {
+  ctx.fillStyle = 'rgba(5,5,15,0.85)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = 'center';
+  ctx.font = '900 48px "Russo One"';
+  ctx.fillStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 25;
+  ctx.fillText(title, W/2, H/2 - 50);
+  ctx.shadowBlur = 0;
+  ctx.font = '14px "Share Tech Mono"';
+  ctx.fillStyle = '#aaaacc';
+  ctx.fillText(sub, W/2, H/2 + 5);
+  ctx.fillStyle = '#666688';
+  if (Math.sin(Date.now()*0.004) > 0) ctx.fillText(action, W/2, H/2 + 50);
+  ctx.textAlign = 'left';
+}
+
+function drawLoadingOverlay() {
+  ctx.fillStyle = 'rgba(0,20,40,0.7)';
+  ctx.fillRect(W/2 - 100, H/2 - 40, 200, 80);
+  ctx.strokeStyle = '#00ccff';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(W/2 - 100, H/2 - 40, 200, 80);
+  ctx.textAlign = 'center';
+  ctx.font = '16px "Russo One"';
+  ctx.fillStyle = '#00ccff';
+  ctx.fillText('LOADING PASSENGERS', W/2, H/2 - 10);
+  
+  // Progress bar
+  const pct = loadTimer / 90; // 1.5 sec
+  ctx.fillStyle = 'rgba(255,255,255,0.1)';
+  ctx.fillRect(W/2 - 70, H/2 + 10, 140, 12);
+  ctx.fillStyle = '#00ccff';
+  ctx.fillRect(W/2 - 70, H/2 + 10, 140 * pct, 12);
+  
+  ctx.textAlign = 'left';
+}
+
+// ---- Update ----
+function update() {
+  if (state !== STATE.PLAYING && state !== STATE.LOADING) return;
+  frameCount++;
+
+  // Timer logic (real-time)
+  if (state === STATE.PLAYING) {
+    const now = Date.now();
+    timeLeft -= (now - lastTimeTick) / 1000;
+    lastTimeTick = now;
+    if (timeLeft <= 0) {
+      timeLeft = 0;
+      state = STATE.GAMEOVER;
+      if (score > highScore) {
+        highScore = score;
+        localStorage.setItem('busSimHigh', String(highScore));
+      }
+      updateUI();
+      return;
+    }
+  }
+
+  // Loading logic
+  if (state === STATE.LOADING) {
+    loadTimer++;
+    if (loadTimer >= 90) { // 1.5 seconds at 60fps
+      state = STATE.PLAYING;
+      lastTimeTick = Date.now(); // reset time tick so no time passes during loading
+    }
+    updateUI();
+    return;
+  }
+
+  // Input
+  const steerLeft = keys['ArrowLeft'] || keys['KeyA'] || touchState.left;
+  const steerRight = keys['ArrowRight'] || keys['KeyD'] || touchState.right;
+  const accelUp = keys['ArrowUp'] || keys['KeyW'] || touchState.up;
+  const brakeDown = keys['ArrowDown'] || keys['KeyS'] || touchState.down;
+
+  if (steerLeft) {
+    bus.x -= bus.steerSpeed;
+    bus.tilt = Math.max(bus.tilt - 0.3, -1.2);
+  } else if (steerRight) {
+    bus.x += bus.steerSpeed;
+    bus.tilt = Math.min(bus.tilt + 0.3, 1.2);
+  } else {
+    bus.tilt *= 0.85;
+  }
+
+  if (accelUp) bus.speed = Math.min(bus.speed + bus.accel, bus.maxSpeed);
+  else if (brakeDown) bus.speed = Math.max(bus.speed - bus.brakeForce, 0);
+  else bus.speed = Math.max(bus.speed - bus.friction, 0);
+
+  bus.x = Math.max(ROAD_LEFT + bus.w/2 + 4, Math.min(ROAD_RIGHT - bus.w/2 - 4, bus.x));
+
+  const scrollSpeed = bus.speed + 1; // base scroll + bus speed
+  roadLineOffset += scrollSpeed;
+  if (roadLineOffset > 40) roadLineOffset -= 40;
+
+  distance += scrollSpeed * 0.3;
+  currentDist += scrollSpeed;
+
+  // Score ticks up with distance
+  score = Math.floor(distance) + passengers * 50;
+
+  // Spawn traffic
+  trafficTimer++;
+  if (trafficTimer >= 35) {
+    trafficTimer = 0;
+    spawnTraffic();
+  }
+
+  // Spawn buildings
+  buildingTimer++;
+  if (buildingTimer >= 15) {
+    buildingTimer = 0;
+    spawnBuilding();
+  }
+
+  // Spawn bus stops
+  if (currentDist >= nextStopDist) {
+    spawnBusStop();
+    currentDist = 0;
+    nextStopDist = 600 + Math.random() * 400;
+  }
+
+  // Update traffic
+  traffic.forEach(t => {
+    if (t.isOncoming) t.y += scrollSpeed + t.speed;
+    else t.y += scrollSpeed - t.speed;
+  });
+  traffic = traffic.filter(t => t.y < H + 100 && t.y > -150);
+
+  // Update buildings
+  buildings.forEach(b => b.y += scrollSpeed * 0.6);
+  buildings = buildings.filter(b => b.y < H + 100);
+
+  // Update bus stops
+  busStops.forEach(s => s.y += scrollSpeed);
+  busStops = busStops.filter(s => s.y < H + 100);
+
+  // Update particles
+  particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life--; });
+  particles = particles.filter(p => p.life > 0);
+
+  emitExhaust();
+
+  if (shakeTimer > 0) shakeTimer--;
+
+  // Collision: Bus vs Traffic
+  for (let i = traffic.length - 1; i >= 0; i--) {
+    const t = traffic[i];
+    if (rectsOverlap(
+      bus.x - bus.w/2, bus.y - bus.h/2, bus.w, bus.h,
+      t.x - t.w/2, t.y - t.h/2, t.w, t.h
+    )) {
+      emitSparks(bus.x, bus.y - bus.h/4);
+      traffic.splice(i, 1);
+      bus.speed = Math.max(bus.speed - 2, 0);
+      timeLeft -= 5; // Penalty!
+      passengers = Math.max(0, passengers - 3);
+      shakeTimer = 12;
+      shakeIntensity = 10;
+      break;
+    }
+  }
+
+  // Pickup: Bus vs Stops
+  for (let i = busStops.length - 1; i >= 0; i--) {
+    const s = busStops[i];
+    if (!s.served) {
+      // Check if bus is near the stop area AND speed is very low (stopped)
+      const distX = Math.abs(bus.x - s.x);
+      const distY = Math.abs(bus.y - s.y);
+      if (distX < 60 && distY < 60 && bus.speed < 0.5) {
+        s.served = true;
+        state = STATE.LOADING;
+        loadTimer = 0;
+        const pickedUp = 3 + Math.floor(Math.random() * 8);
+        passengers += pickedUp;
+        timeLeft = Math.min(timeLeft + 8 + pickedUp * 1.5, maxTime + 15); // Time bonus!
+        emitPassengers(s.x, s.y);
+      }
+    }
+  }
+
+  updateUI();
+}
+
+function rectsOverlap(x1, y1, w1, h1, x2, y2, w2, h2) {
+  const pad = 6;
+  return x1+pad < x2+w2-pad && x1+w1-pad > x2+pad && y1+pad < y2+h2-pad && y1+h1-pad > y2+pad;
+}
+
+// ---- Game Loop ----
+function gameLoop() {
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+// ---- Init ----
+updateUI();
+gameLoop();
+</script>
+</body>
+</html>
